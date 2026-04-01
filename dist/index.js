@@ -45,22 +45,27 @@ const child_process_1 = require("child_process");
 const inquirer_1 = __importDefault(require("inquirer"));
 const CONFIG_PATH = path.join(process.env.HOME || '', '.config', 'submit-to-cli', 'config.json');
 async function loadConfig() {
-    // Environment variables take priority over config file
+    // Config file takes priority, environment variables as fallback
     const envToken = process.env.DIRS_TOKEN;
     const envBaseUrl = process.env.DIRS_BASE_URL;
-    if (envToken && envBaseUrl) {
-        return { DIRS_TOKEN: envToken, DIRS_BASE_URL: envBaseUrl.replace(/\/$/, '') };
-    }
-    if (!(await fs.pathExists(CONFIG_PATH))) {
+    if (!(await fs.pathExists(CONFIG_PATH)) && !envToken) {
         throw new Error(`Not logged in. Run 'submit-to-cli login' first.`);
     }
-    const config = await fs.readJson(CONFIG_PATH);
-    const token = envToken || config.DIRS_TOKEN;
-    const baseUrl = envBaseUrl || config.DIRS_BASE_URL;
+    let token = '';
+    let baseUrl = 'https://aidirs.org';
+    if (await fs.pathExists(CONFIG_PATH)) {
+        const config = await fs.readJson(CONFIG_PATH);
+        token = config.DIRS_TOKEN || envToken || '';
+        baseUrl = (config.DIRS_BASE_URL || envBaseUrl || 'https://aidirs.org').replace(/\/$/, '');
+    }
+    else {
+        token = envToken || '';
+        baseUrl = (envBaseUrl || 'https://aidirs.org').replace(/\/$/, '');
+    }
     if (!token) {
         throw new Error(`DIRS_TOKEN not found. Set DIRS_TOKEN env var or run 'submit-to-cli login' first.`);
     }
-    return { DIRS_TOKEN: token, DIRS_BASE_URL: (baseUrl || 'https://aidirs.org').replace(/\/$/, '') };
+    return { DIRS_TOKEN: token, DIRS_BASE_URL: baseUrl };
 }
 function openBrowser(url) {
     const platform = process.platform;
