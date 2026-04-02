@@ -1,10 +1,10 @@
 {
-  "name": "submit-dir",
+  "name": "ship",
   "version": "1.0.9",
   "description": "CLI tool for submitting URLs to aidirs.org",
   "main": "dist/index.js",
   "bin": {
-    "submit-dir": "./dist/index.js"
+    "ship": "./dist/index.js"
   },
   "files": [
     "dist",

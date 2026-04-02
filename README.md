@@ -1,11 +1,11 @@
-# submit-dir
+# ship
 
 CLI tool for submitting URLs to [aidirs.org](https://aidirs.org) and [backlinkdirs.com](https://backlinkdirs.com).
 
 ## Installation
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/RobinWM/submit-dir-cli/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/RobinWM/ship-cli/main/install.sh | bash
 ```
 
 > **Windows?** Use [Git Bash](https://git-scm.com/download/win) or [WSL](https://docs.microsoft.com/en-us/windows/wsl/). On PowerShell, use `curl.exe` explicitly.
@@ -13,8 +13,8 @@ curl -fsSL https://raw.githubusercontent.com/RobinWM/submit-dir-cli/main/install
 Or from source:
 
 ```bash
-git clone https://github.com/RobinWM/submit-dir-cli.git
-cd submit-dir-cli
+git clone https://github.com/RobinWM/ship-cli.git
+cd ship-cli
 bash install.sh
 ```
 
@@ -23,14 +23,14 @@ bash install.sh
 > **Note:** Submitting URLs requires an active subscription plan.
 
 ```bash
-submit-dir login
+ship login
 ```
 
 Or choose a site explicitly:
 
 ```bash
-submit-dir login --site aidirs.org
-submit-dir login --site backlinkdirs.com
+ship login --site aidirs.org
+ship login --site backlinkdirs.com
 ```
 
 Select the site, browser opens automatically, login and done. Tokens are auto-saved per site. If you don't have an API token yet, one will be created automatically.
@@ -39,28 +39,28 @@ Select the site, browser opens automatically, login and done. Tokens are auto-sa
 
 ### Login
 ```bash
-submit-dir login
-submit-dir login --site backlinkdirs.com
+ship login
+ship login --site backlinkdirs.com
 ```
 
 ### Submit a URL
 ```bash
-submit-dir submit https://example.com
-submit-dir submit https://example.com --site backlinkdirs.com
-submit-dir submit https://example.com --json
-submit-dir submit https://example.com --quiet
+ship submit https://example.com
+ship submit https://example.com --site backlinkdirs.com
+ship submit https://example.com --json
+ship submit https://example.com --quiet
 ```
 
 ### Preview a URL (no record created)
 ```bash
-submit-dir fetch https://example.com
-submit-dir fetch https://example.com --site aidirs.org
-submit-dir fetch https://example.com --json
+ship fetch https://example.com
+ship fetch https://example.com --site aidirs.org
+ship fetch https://example.com --json
 ```
 
 ### Show help
 ```bash
-submit-dir --help
+ship --help
 ```
 
 ## Commands
@@ -76,7 +76,7 @@ submit-dir --help
 
 ## Config Location
 
-`~/.config/submit-dir/config.json`
+`~/.config/ship/config.json`
 
 ```json
 {
@@ -103,7 +103,7 @@ Config file takes priority. Environment variables serve as fallback for the acti
 ```bash
 export DIRS_TOKEN="your-token-here"
 export DIRS_BASE_URL="https://aidirs.org"
-submit-dir submit https://example.com
+ship submit https://example.com
 ```
 
 ## Development
@@ -125,8 +125,8 @@ Release a new version:
 Publishing uses `files` in `package.json`, so npm packages include `dist/` even though build output is generated from `src/`.
 
 GitHub Releases are expected to publish:
-- `submit-dir-linux-x64`
-- `submit-dir-linux-arm64`
-- `submit-dir-darwin-x64`
-- `submit-dir-darwin-arm64`
-- `submit-dir-latest.tgz`
+- `ship-linux-x64`
+- `ship-linux-arm64`
+- `ship-darwin-x64`
+- `ship-darwin-arm64`
+- `ship-latest.tgz`

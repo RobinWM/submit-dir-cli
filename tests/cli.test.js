@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const CLI_PATH = path.join(__dirname, '..', 'dist', 'index.js');
 
 function runCli(args, extraEnv = {}) {
-  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'submit-dir-test-'));
+  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ship-test-'));
   const env = {
     ...process.env,
     HOME: tempHome,
@@ -41,7 +41,7 @@ test('submit --help shows site/json/quiet options', () => {
 test('version command prints current version', () => {
   const result = runCli(['version']);
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /submit-dir v1\.0\.[0-9]+/);
+  assert.match(result.stdout, /ship v1\.0\.[0-9]+/);
 });
 
 test('self-update returns json on windows with manual upgrade guidance', () => {
@@ -75,8 +75,8 @@ test('invalid URL with --json returns structured error output', () => {
 });
 
 test('legacy config is read for existing users', () => {
-  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'submit-dir-test-'));
-  const configDir = path.join(tempHome, '.config', 'submit-dir');
+  const tempHome = fs.mkdtempSync(path.join(os.tmpdir(), 'ship-test-'));
+  const configDir = path.join(tempHome, '.config', 'ship');
   fs.mkdirSync(configDir, { recursive: true });
   fs.writeFileSync(
     path.join(configDir, 'config.json'),

@@ -23,7 +23,7 @@ if ! command -v npm >/dev/null 2>&1; then
   exit 1
 fi
 
-REPO="RobinWM/submit-dir-cli"
+REPO="RobinWM/ship-cli"
 
 CURRENT_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 if [[ "$CURRENT_BRANCH" != "main" ]]; then

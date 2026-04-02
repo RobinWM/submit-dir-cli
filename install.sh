@@ -2,12 +2,12 @@
 set -euo pipefail
 
 REPO_OWNER="RobinWM"
-REPO_NAME="submit-dir-cli"
+REPO_NAME="ship-cli"
 REPO_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
 RELEASE_BASE_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download"
-INSTALL_DIR="$HOME/.submit-dir/bin"
-TARGET_BIN="$INSTALL_DIR/submit-dir"
-TEMP_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t submit-dir)"
+INSTALL_DIR="$HOME/.ship/bin"
+TARGET_BIN="$INSTALL_DIR/ship"
+TEMP_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t ship)"
 
 cleanup() {
   rm -rf "$TEMP_DIR"
@@ -42,11 +42,11 @@ ensure_in_path() {
   mkdir -p "$(dirname "$shell_rc")"
   touch "$shell_rc"
 
-  if ! grep -Fq 'export PATH="$HOME/.submit-dir/bin:$PATH"' "$shell_rc"; then
+  if ! grep -Fq 'export PATH="$HOME/.ship/bin:$PATH"' "$shell_rc"; then
     {
       echo
-      echo '# submit-dir'
-      echo 'export PATH="$HOME/.submit-dir/bin:$PATH"'
+      echo '# ship'
+      echo 'export PATH="$HOME/.ship/bin:$PATH"'
     } >> "$shell_rc"
   fi
 
@@ -123,9 +123,9 @@ verify_binary() {
 install_release_binary() {
   local os="$1"
   local arch="$2"
-  local asset_name="submit-dir-${os}-${arch}"
+  local asset_name="ship-${os}-${arch}"
   if [ "$os" = "windows" ]; then
-    asset_name="submit-dir-windows-${arch}"
+    asset_name="ship-windows-${arch}"
   fi
   local temp_binary="$TEMP_DIR/$asset_name"
   local release_url="${RELEASE_BASE_URL}/${asset_name}"
@@ -142,7 +142,7 @@ install_release_binary() {
     cat > "$TARGET_BIN" <<'EOF'
 #!/bin/sh
 DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-exec "$DIR/submit-dir.exe" "$@"
+exec "$DIR/ship.exe" "$@"
 EOF
     chmod +x "$TARGET_BIN"
     log "✅ Installed release binary to $TARGET_BIN.exe"
@@ -177,12 +177,12 @@ install_from_npm_package() {
 
   if [ "${1:-}" = "windows" ]; then
     log "No Windows executable asset found in the latest release. Refusing broken JS fallback."
-    log "Please install with: npm install -g https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/submit-dir-latest.tgz"
+    log "Please install with: npm install -g https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/ship-latest.tgz"
     exit 1
   fi
 
-  local package_url="${RELEASE_BASE_URL}/submit-dir-latest.tgz"
-  local package_tgz="$TEMP_DIR/submit-dir.tgz"
+  local package_url="${RELEASE_BASE_URL}/ship-latest.tgz"
+  local package_tgz="$TEMP_DIR/ship.tgz"
 
   if ! try_download_file "$package_url" "$package_tgz"; then
     return 1
@@ -221,7 +221,7 @@ install_from_source() {
 }
 
 main() {
-  log "Installing submit-dir..."
+  log "Installing ship..."
 
   mkdir -p "$INSTALL_DIR"
 
@@ -231,13 +231,13 @@ main() {
 
   if install_release_binary "$os" "$arch"; then
     ensure_in_path
-    log "✅ Done! Run 'submit-dir --help' to get started."
+    log "✅ Done! Run 'ship --help' to get started."
     return 0
   fi
 
   if install_from_npm_package "$os"; then
     ensure_in_path
-    log "✅ Done! Run 'submit-dir --help' to get started."
+    log "✅ Done! Run 'ship --help' to get started."
     return 0
   fi
 
@@ -248,7 +248,7 @@ main() {
 
   install_from_source
   ensure_in_path
-  log "✅ Done! Run 'submit-dir --help' to get started."
+  log "✅ Done! Run 'ship --help' to get started."
 }
 
 main "$@"

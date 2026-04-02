@@ -24,9 +24,9 @@ const SITE_AUTH_URLS: Record<SupportedSite, string> = {
   'backlinkdirs.com': 'https://backlinkdirs.com/api/cli/callback',
 };
 
-const RELEASE_REPO = 'RobinWM/submit-dir-cli';
+const RELEASE_REPO = 'RobinWM/ship-cli';
 const RELEASE_API_URL = `https://api.github.com/repos/${RELEASE_REPO}/releases/latest`;
-const UPDATE_CHECK_PATH = path.join(process.env.HOME || '', '.config', 'submit-dir', 'update-check.json');
+const UPDATE_CHECK_PATH = path.join(process.env.HOME || '', '.config', 'ship', 'update-check.json');
 const UPDATE_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000;
 const REQUEST_TIMEOUT_MS = 60_000;
 const MAX_RETRIES = 2;
@@ -38,7 +38,7 @@ const EXIT_CODES = {
   API_ERROR: 4,
 } as const;
 
-const CONFIG_PATH = path.join(process.env.HOME || '', '.config', 'submit-dir', 'config.json');
+const CONFIG_PATH = path.join(process.env.HOME || '', '.config', 'ship', 'config.json');
 
 interface LegacyConfig {
   DIRS_TOKEN?: string;
@@ -173,13 +173,13 @@ function detectPlatformAssetName(): string | null {
   const arch = process.env.TEST_SUBMIT_DIR_ARCH || process.arch;
 
   if (platform === 'linux') {
-    if (arch === 'x64') return 'submit-dir-linux-x64';
-    if (arch === 'arm64') return 'submit-dir-linux-arm64';
+    if (arch === 'x64') return 'ship-linux-x64';
+    if (arch === 'arm64') return 'ship-linux-arm64';
   }
 
   if (platform === 'darwin') {
-    if (arch === 'x64') return 'submit-dir-darwin-x64';
-    if (arch === 'arm64') return 'submit-dir-darwin-arm64';
+    if (arch === 'x64') return 'ship-darwin-x64';
+    if (arch === 'arm64') return 'ship-darwin-arm64';
   }
 
   return null;
@@ -245,7 +245,7 @@ async function loadConfig(options: LoadConfigOptions = {}): Promise<LoadedConfig
 
   if (!token) {
     throw new CliError(
-      `No token configured for ${site}. Run 'submit-dir login --site ${site}' first or set DIRS_TOKEN.`,
+      `No token configured for ${site}. Run 'ship login --site ${site}' first or set DIRS_TOKEN.`,
       EXIT_CODES.AUTH_ERROR,
     );
   }
@@ -427,7 +427,7 @@ async function httpGetJson<T = unknown>(urlString: string): Promise<T> {
         method: 'GET',
         headers: {
           Accept: 'application/vnd.github+json',
-          'User-Agent': `submit-dir/${CLI_VERSION}`,
+          'User-Agent': `ship/${CLI_VERSION}`,
         },
       },
       (res) => {
@@ -481,7 +481,7 @@ async function downloadToFile(urlString: string, destination: string): Promise<v
         port: url.port,
         path: `${url.pathname}${url.search}`,
         headers: {
-          'User-Agent': `submit-dir/${CLI_VERSION}`,
+          'User-Agent': `ship/${CLI_VERSION}`,
         },
       },
       (res) => {
@@ -596,7 +596,7 @@ async function maybeNotifyUpdate(options: { silent?: boolean; json?: boolean; qu
     const latest = await getLatestReleaseInfo({ useCache: true });
     if (compareVersions(latest.version, CLI_VERSION) > 0) {
       if (!options.silent && !options.json && !options.quiet) {
-        console.log(`ℹ️  Update available: v${latest.version} (current v${CLI_VERSION}). Run 'submit-dir self-update'.`);
+        console.log(`ℹ️  Update available: v${latest.version} (current v${CLI_VERSION}). Run 'ship self-update'.`);
       }
     }
   } catch {
@@ -781,7 +781,7 @@ async function showVersion(options: { latest?: boolean; json?: boolean }) {
       return;
     }
 
-    console.log(`submit-dir v${CLI_VERSION}`);
+    console.log(`ship v${CLI_VERSION}`);
     if (options.latest && payload.latest) {
       console.log(`latest: v${payload.latest}`);
       if (payload.updateAvailable) {
@@ -831,7 +831,7 @@ async function selfUpdate(options: { json?: boolean }) {
     if (options.json) {
       printJson({ success: true, updated: true, previous: CLI_VERSION, current: latest.version });
     } else {
-      console.log(`Updated submit-dir from v${CLI_VERSION} to v${latest.version}.`);
+      console.log(`Updated ship from v${CLI_VERSION} to v${latest.version}.`);
     }
   } catch (error: unknown) {
     printCommandError(error, { json: options.json });
@@ -875,8 +875,8 @@ async function fetchPreview(targetUrl: string, options: { site?: string; json?: 
 const program = new Command();
 
 program
-  .name('submit-dir')
-  .description('CLI tool for submitting URLs to aidirs.org and backlinkdirs.com')
+  .name('ship')
+  .description('CLI for shipping, submitting, and managing site growth workflows')
   .version(CLI_VERSION);
 
 program
