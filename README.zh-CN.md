@@ -14,7 +14,7 @@ curl -fsSL https://raw.githubusercontent.com/RobinWM/submit-dir-cli/main/install
 
 ```bash
 git clone https://github.com/RobinWM/submit-dir-cli.git
-cd submit-dir
+cd submit-dir-cli
 bash install.sh
 ```
 

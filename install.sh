@@ -1,10 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-REPO_URL="https://github.com/RobinWM/submit-dir-cli.git"
-TEMP_DIR="$(mktemp -d)"
+REPO_OWNER="RobinWM"
+REPO_NAME="submit-dir-cli"
+REPO_URL="https://github.com/${REPO_OWNER}/${REPO_NAME}.git"
+RAW_BASE_URL="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main"
 INSTALL_DIR="$HOME/.submit-dir/bin"
 TARGET_BIN="$INSTALL_DIR/submit-dir"
+TEMP_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t submit-dir)"
 
 cleanup() {
   rm -rf "$TEMP_DIR"
@@ -13,6 +16,13 @@ trap cleanup EXIT
 
 log() {
   printf '%s\n' "$1"
+}
+
+require_command() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    log "Missing required command: $1"
+    exit 1
+  fi
 }
 
 ensure_in_path() {
@@ -44,69 +54,185 @@ ensure_in_path() {
   log "   Run: source $shell_rc"
 }
 
-require_command() {
-  if ! command -v "$1" >/dev/null 2>&1; then
-    log "Missing required command: $1"
+resolve_os() {
+  local uname_s
+  uname_s="$(uname -s)"
+
+  case "$uname_s" in
+    Linux) echo "linux" ;;
+    Darwin) echo "darwin" ;;
+    MINGW*|MSYS*|CYGWIN*) echo "windows" ;;
+    *) log "Unsupported operating system: $uname_s"; exit 1 ;;
+  esac
+}
+
+resolve_arch() {
+  local uname_m
+  uname_m="$(uname -m)"
+
+  case "$uname_m" in
+    x86_64|amd64) echo "x64" ;;
+    aarch64|arm64) echo "arm64" ;;
+    *) log "Unsupported architecture: $uname_m"; exit 1 ;;
+  esac
+}
+
+download_file() {
+  local url="$1"
+  local output="$2"
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$url" -o "$output"
+    return 0
+  fi
+
+  if command -v wget >/dev/null 2>&1; then
+    wget -q "$url" -O "$output"
+    return 0
+  fi
+
+  log "Missing required command: curl or wget"
+  exit 1
+}
+
+try_download_file() {
+  local url="$1"
+  local output="$2"
+
+  if command -v curl >/dev/null 2>&1; then
+    curl -fsSL "$url" -o "$output" >/dev/null 2>&1
+    return $?
+  fi
+
+  if command -v wget >/dev/null 2>&1; then
+    wget -q "$url" -O "$output" >/dev/null 2>&1
+    return $?
+  fi
+
+  return 1
+}
+
+verify_binary() {
+  local binary_path="$1"
+  if ! "$binary_path" --help >/dev/null 2>&1; then
+    log "Downloaded binary failed verification: $binary_path"
     exit 1
   fi
 }
 
-log "Installing submit-dir..."
+install_release_binary() {
+  local os="$1"
+  local arch="$2"
+  local temp_binary="$TEMP_DIR/submit-dir"
+  local release_url="https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/submit-dir-${os}-${arch}"
 
-OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-ARCH="$(uname -m)"
-case "$ARCH" in
-  x86_64) ARCH="x64" ;;
-  aarch64|arm64) ARCH="arm64" ;;
-  *) log "Unsupported architecture: $ARCH"; exit 1 ;;
-esac
-
-mkdir -p "$INSTALL_DIR"
-
-RELEASE_URL="https://github.com/RobinWM/submit-dir-cli/releases/latest/download/submit-dir-${OS}-${ARCH}"
-INSTALLED=0
-
-if command -v curl >/dev/null 2>&1; then
-  if curl -fsI "$RELEASE_URL" >/dev/null 2>&1; then
-    log "Downloading binary for $OS/$ARCH..."
-    curl -fsSL "$RELEASE_URL" -o "$TARGET_BIN"
-    chmod +x "$TARGET_BIN"
-    INSTALLED=1
-    log "✅ Installed binary to $TARGET_BIN"
+  if ! try_download_file "$release_url" "$temp_binary"; then
+    return 1
   fi
-elif command -v wget >/dev/null 2>&1; then
-  if wget -q --spider "$RELEASE_URL" 2>/dev/null; then
-    log "Downloading binary for $OS/$ARCH..."
-    wget -q "$RELEASE_URL" -O "$TARGET_BIN"
-    chmod +x "$TARGET_BIN"
-    INSTALLED=1
-    log "✅ Installed binary to $TARGET_BIN"
-  fi
-fi
 
-if [ "$INSTALLED" = "0" ]; then
-  log "No prebuilt binary found. Falling back to npm install..."
+  chmod +x "$temp_binary"
+  verify_binary "$temp_binary"
+  mv "$temp_binary" "$TARGET_BIN"
+  chmod +x "$TARGET_BIN"
+  log "✅ Installed release binary to $TARGET_BIN"
+  return 0
+}
+
+find_npm_global_bin() {
+  local prefix
+  prefix="$(npm prefix -g)"
+
+  if [ -d "$prefix/bin" ]; then
+    printf '%s\n' "$prefix/bin"
+    return 0
+  fi
+
+  if [ -d "$prefix" ]; then
+    printf '%s\n' "$prefix"
+    return 0
+  fi
+
+  return 1
+}
+
+install_from_npm_package() {
+  require_command npm
+
+  local package_url="${RAW_BASE_URL}/submit-dir-latest.tgz"
+  local package_tgz="$TEMP_DIR/submit-dir.tgz"
+
+  if ! try_download_file "$package_url" "$package_tgz"; then
+    return 1
+  fi
+
+  log "Installing published package..."
+  npm install -g "$package_tgz"
+
+  local global_bin_dir
+  global_bin_dir="$(find_npm_global_bin)"
+
+  if [ ! -x "$global_bin_dir/submit-dir" ]; then
+    log "submit-dir binary not found after npm package install"
+    exit 1
+  fi
+
+  ln -sf "$global_bin_dir/submit-dir" "$TARGET_BIN"
+  log "✅ Installed npm package to $TARGET_BIN"
+  return 0
+}
+
+install_from_source() {
   require_command git
   require_command npm
 
+  log "No published artifact found. Falling back to source install..."
   git clone --depth=1 "$REPO_URL" "$TEMP_DIR/repo"
   cd "$TEMP_DIR/repo"
   npm install
   npm run build
   npm pack >/dev/null
 
-  PACKAGE_TGZ="$(ls submit-dir-*.tgz | head -n 1)"
-  npm install -g "$PACKAGE_TGZ"
+  local package_tgz
+  package_tgz="$(ls submit-dir-*.tgz | head -n 1)"
 
-  GLOBAL_BIN_DIR="$(npm bin -g)"
-  if [ ! -x "$GLOBAL_BIN_DIR/submit-dir" ]; then
-    log "submit-dir binary not found after npm install"
+  npm install -g "$package_tgz"
+
+  local global_bin_dir
+  global_bin_dir="$(find_npm_global_bin)"
+
+  if [ ! -x "$global_bin_dir/submit-dir" ]; then
+    log "submit-dir binary not found after source install"
     exit 1
   fi
 
-  ln -sf "$GLOBAL_BIN_DIR/submit-dir" "$TARGET_BIN"
-  log "✅ Installed npm package to $TARGET_BIN"
-fi
+  ln -sf "$global_bin_dir/submit-dir" "$TARGET_BIN"
+  log "✅ Installed source-built package to $TARGET_BIN"
+}
 
-ensure_in_path
-log "✅ Done! Run 'submit-dir --help' to get started."
+main() {
+  log "Installing submit-dir..."
+
+  mkdir -p "$INSTALL_DIR"
+
+  local os arch
+  os="$(resolve_os)"
+  arch="$(resolve_arch)"
+
+  if install_release_binary "$os" "$arch"; then
+    ensure_in_path
+    log "✅ Done! Run 'submit-dir --help' to get started."
+    return 0
+  fi
+
+  if install_from_npm_package; then
+    ensure_in_path
+    log "✅ Done! Run 'submit-dir --help' to get started."
+    return 0
+  fi
+
+  install_from_source
+  ensure_in_path
+  log "✅ Done! Run 'submit-dir --help' to get started."
+}
+
+main "$@"

@@ -14,7 +14,7 @@ Or from source:
 
 ```bash
 git clone https://github.com/RobinWM/submit-dir-cli.git
-cd submit-dir
+cd submit-dir-cli
 bash install.sh
 ```
 
