@@ -104,16 +104,24 @@ async function login(cliVersion, options) {
     const authUrl = `${sites_1.SITE_AUTH_URLS[site]}?callback=${encodeURIComponent(callbackWithState)}&site=${encodeURIComponent(site)}`;
     console.log(`\n🔐 Opening browser to login to ${site}...`);
     console.log(`   Waiting for callback on localhost:${port}\n`);
-    let browserOpened = true;
-    try {
-        (0, browser_1.openBrowser)(authUrl);
+    const shouldOpenBrowser = process.platform !== 'linux';
+    let browserOpened = false;
+    if (shouldOpenBrowser) {
+        try {
+            (0, browser_1.openBrowser)(authUrl);
+            browserOpened = true;
+        }
+        catch {
+            console.error(`\n❌ Failed to open browser automatically.`);
+            console.error(`Open this URL manually:`);
+            console.error(authUrl);
+            console.error(`\nAfter login, copy the final localhost callback URL from your browser and paste it here.`);
+        }
     }
-    catch {
-        browserOpened = false;
-        console.error(`\n❌ Failed to open browser automatically.`);
-        console.error(`Open this URL manually:`);
-        console.error(authUrl);
-        console.error(`\nAfter login, copy the final localhost callback URL from your browser and paste it here.`);
+    else {
+        console.log(`Open this URL manually:`);
+        console.log(authUrl);
+        console.log(`\nAfter login, copy the final localhost callback URL from your browser and paste it here.`);
     }
     try {
         const result = browserOpened

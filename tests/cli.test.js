@@ -97,7 +97,7 @@ test('legacy config is read for existing users', () => {
   assert.doesNotMatch(combinedOutput, /No token configured/);
 });
 
-test('login prints manual fallback instructions when browser open fails', () => {
+test('login on linux prints manual instructions without trying to open browser', () => {
   const result = spawnSync(process.execPath, [CLI_PATH, 'login', '--site', 'aidirs.org'], {
     env: {
       ...process.env,
@@ -112,7 +112,7 @@ test('login prints manual fallback instructions when browser open fails', () => 
   });
 
   assert.equal(result.status, 2);
-  assert.match(result.stderr, /Failed to open browser automatically/);
-  assert.match(result.stderr, /Open this URL manually:/);
-  assert.match(result.stderr, /paste it here/i);
+  assert.match(result.stdout, /Open this URL manually:/);
+  assert.match(result.stdout, /paste it here/i);
+  assert.doesNotMatch(result.stderr, /Failed to open browser automatically/);
 });

@@ -78,16 +78,23 @@ export async function login(cliVersion: string, options: { site?: string }) {
   console.log(`\n🔐 Opening browser to login to ${site}...`);
   console.log(`   Waiting for callback on localhost:${port}\n`);
 
-  let browserOpened = true;
+  const shouldOpenBrowser = process.platform !== 'linux';
+  let browserOpened = false;
 
-  try {
-    openBrowser(authUrl);
-  } catch {
-    browserOpened = false;
-    console.error(`\n❌ Failed to open browser automatically.`);
-    console.error(`Open this URL manually:`);
-    console.error(authUrl);
-    console.error(`\nAfter login, copy the final localhost callback URL from your browser and paste it here.`);
+  if (shouldOpenBrowser) {
+    try {
+      openBrowser(authUrl);
+      browserOpened = true;
+    } catch {
+      console.error(`\n❌ Failed to open browser automatically.`);
+      console.error(`Open this URL manually:`);
+      console.error(authUrl);
+      console.error(`\nAfter login, copy the final localhost callback URL from your browser and paste it here.`);
+    }
+  } else {
+    console.log(`Open this URL manually:`);
+    console.log(authUrl);
+    console.log(`\nAfter login, copy the final localhost callback URL from your browser and paste it here.`);
   }
 
   try {
