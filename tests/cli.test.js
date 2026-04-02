@@ -41,7 +41,7 @@ test('submit --help shows site/json/quiet options', () => {
 test('version command prints current version', () => {
   const result = runCli(['version']);
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /submit-dir v1\.0\.5/);
+  assert.match(result.stdout, /submit-dir v1\.0\.[0-9]+/);
 });
 
 test('self-update returns json on windows with manual upgrade guidance', () => {

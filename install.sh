@@ -172,6 +172,12 @@ find_npm_global_bin() {
 install_from_npm_package() {
   require_command npm
 
+  if [ "${1:-}" = "windows" ]; then
+    log "No Windows executable asset found in the latest release. Refusing broken JS fallback."
+    log "Please install with: npm install -g https://github.com/${REPO_OWNER}/${REPO_NAME}/releases/latest/download/submit-dir-latest.tgz"
+    exit 1
+  fi
+
   local package_url="${RELEASE_BASE_URL}/submit-dir-latest.tgz"
   local package_tgz="$TEMP_DIR/submit-dir.tgz"
 
@@ -226,10 +232,15 @@ main() {
     return 0
   fi
 
-  if install_from_npm_package; then
+  if install_from_npm_package "$os"; then
     ensure_in_path
     log "✅ Done! Run 'submit-dir --help' to get started."
     return 0
+  fi
+
+  if [ "$os" = "windows" ]; then
+    log "Windows source fallback is disabled because it produces a broken JS-only install."
+    exit 1
   fi
 
   install_from_source
