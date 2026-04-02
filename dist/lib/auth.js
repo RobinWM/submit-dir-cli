@@ -1,10 +1,45 @@
 "use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.login = login;
 const crypto_1 = require("crypto");
+const readline = __importStar(require("readline/promises"));
+const process_1 = require("process");
 const inquirer_1 = __importDefault(require("inquirer"));
 const errors_1 = require("./errors");
 const config_1 = require("./config");
@@ -24,6 +59,39 @@ async function promptForSite() {
     ]);
     return site;
 }
+async function promptForManualCallback(expectedSite, expectedState) {
+    const rl = readline.createInterface({ input: process_1.stdin, output: process_1.stdout });
+    try {
+        const callbackInput = await rl.question('\nPaste the localhost callback URL after login:\n');
+        const callbackUrl = new URL(callbackInput.trim());
+        const token = callbackUrl.searchParams.get('token');
+        const site = (0, sites_1.normalizeSite)(callbackUrl.searchParams.get('site') || expectedSite);
+        const state = callbackUrl.searchParams.get('state');
+        const error = callbackUrl.searchParams.get('error');
+        if (state !== expectedState) {
+            throw new errors_1.CliError('Login failed: invalid callback state.', errors_1.EXIT_CODES.AUTH_ERROR);
+        }
+        if (site !== expectedSite) {
+            throw new errors_1.CliError('Login failed: callback site mismatch.', errors_1.EXIT_CODES.AUTH_ERROR);
+        }
+        if (error) {
+            throw new errors_1.CliError(error, errors_1.EXIT_CODES.AUTH_ERROR);
+        }
+        if (!token) {
+            throw new errors_1.CliError('Login failed: missing token in callback URL.', errors_1.EXIT_CODES.AUTH_ERROR);
+        }
+        return { token, site };
+    }
+    catch (error) {
+        if (error instanceof errors_1.CliError) {
+            throw error;
+        }
+        throw new errors_1.CliError(`Invalid callback URL: ${(0, errors_1.getErrorMessage)(error)}`, errors_1.EXIT_CODES.AUTH_ERROR);
+    }
+    finally {
+        rl.close();
+    }
+}
 async function login(cliVersion, options) {
     await (0, update_1.maybeNotifyUpdate)(cliVersion);
     const site = options.site
@@ -33,21 +101,25 @@ async function login(cliVersion, options) {
     const callbackUrl = `http://localhost:${port}/callback`;
     const state = (0, crypto_1.randomBytes)(24).toString('hex');
     const callbackWithState = `${callbackUrl}?state=${encodeURIComponent(state)}`;
-    const authUrl = `${sites_1.SITE_AUTH_URLS[site]}?callback=${encodeURIComponent(callbackWithState)}`;
+    const authUrl = `${sites_1.SITE_AUTH_URLS[site]}?callback=${encodeURIComponent(callbackWithState)}&site=${encodeURIComponent(site)}`;
     console.log(`\n🔐 Opening browser to login to ${site}...`);
     console.log(`   Waiting for callback on localhost:${port}\n`);
+    let browserOpened = true;
     try {
         (0, browser_1.openBrowser)(authUrl);
     }
-    catch (error) {
+    catch {
+        browserOpened = false;
         console.error(`\n❌ Failed to open browser automatically.`);
         console.error(`Open this URL manually:`);
         console.error(authUrl);
-        process.exit(error instanceof errors_1.CliError ? error.exitCode : errors_1.EXIT_CODES.AUTH_ERROR);
+        console.error(`\nAfter login, copy the final localhost callback URL from your browser and paste it here.`);
     }
     try {
-        const { token } = await (0, callback_server_1.waitForCallback)(port, site, state);
-        await (0, config_1.saveSiteConfig)(site, token);
+        const result = browserOpened
+            ? await (0, callback_server_1.waitForCallback)(port, site, state)
+            : await promptForManualCallback(site, state);
+        await (0, config_1.saveSiteConfig)(site, result.token);
         console.log(`\n✅ Login successful`);
     }
     catch (error) {

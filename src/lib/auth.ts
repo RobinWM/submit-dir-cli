@@ -1,4 +1,6 @@
 import { randomBytes } from 'crypto';
+import * as readline from 'readline/promises';
+import { stdin as input, stdout as output } from 'process';
 import inquirer from 'inquirer';
 import { CliError, EXIT_CODES, getErrorMessage } from './errors';
 import { saveSiteConfig } from './config';
@@ -21,6 +23,45 @@ async function promptForSite(): Promise<SupportedSite> {
   return site;
 }
 
+async function promptForManualCallback(expectedSite: SupportedSite, expectedState: string): Promise<{ token: string; site: SupportedSite }> {
+  const rl = readline.createInterface({ input, output });
+
+  try {
+    const callbackInput = await rl.question('\nPaste the localhost callback URL after login:\n');
+    const callbackUrl = new URL(callbackInput.trim());
+    const token = callbackUrl.searchParams.get('token');
+    const site = normalizeSite(callbackUrl.searchParams.get('site') || expectedSite);
+    const state = callbackUrl.searchParams.get('state');
+    const error = callbackUrl.searchParams.get('error');
+
+    if (state !== expectedState) {
+      throw new CliError('Login failed: invalid callback state.', EXIT_CODES.AUTH_ERROR);
+    }
+
+    if (site !== expectedSite) {
+      throw new CliError('Login failed: callback site mismatch.', EXIT_CODES.AUTH_ERROR);
+    }
+
+    if (error) {
+      throw new CliError(error, EXIT_CODES.AUTH_ERROR);
+    }
+
+    if (!token) {
+      throw new CliError('Login failed: missing token in callback URL.', EXIT_CODES.AUTH_ERROR);
+    }
+
+    return { token, site };
+  } catch (error) {
+    if (error instanceof CliError) {
+      throw error;
+    }
+
+    throw new CliError(`Invalid callback URL: ${getErrorMessage(error)}`, EXIT_CODES.AUTH_ERROR);
+  } finally {
+    rl.close();
+  }
+}
+
 export async function login(cliVersion: string, options: { site?: string }) {
   await maybeNotifyUpdate(cliVersion);
 
@@ -32,23 +73,28 @@ export async function login(cliVersion: string, options: { site?: string }) {
   const callbackUrl = `http://localhost:${port}/callback`;
   const state = randomBytes(24).toString('hex');
   const callbackWithState = `${callbackUrl}?state=${encodeURIComponent(state)}`;
-  const authUrl = `${SITE_AUTH_URLS[site]}?callback=${encodeURIComponent(callbackWithState)}`;
+  const authUrl = `${SITE_AUTH_URLS[site]}?callback=${encodeURIComponent(callbackWithState)}&site=${encodeURIComponent(site)}`;
 
   console.log(`\n🔐 Opening browser to login to ${site}...`);
   console.log(`   Waiting for callback on localhost:${port}\n`);
 
+  let browserOpened = true;
+
   try {
     openBrowser(authUrl);
-  } catch (error: unknown) {
+  } catch {
+    browserOpened = false;
     console.error(`\n❌ Failed to open browser automatically.`);
     console.error(`Open this URL manually:`);
     console.error(authUrl);
-    process.exit(error instanceof CliError ? error.exitCode : EXIT_CODES.AUTH_ERROR);
+    console.error(`\nAfter login, copy the final localhost callback URL from your browser and paste it here.`);
   }
 
   try {
-    const { token } = await waitForCallback(port, site, state);
-    await saveSiteConfig(site, token);
+    const result = browserOpened
+      ? await waitForCallback(port, site, state)
+      : await promptForManualCallback(site, state);
+    await saveSiteConfig(site, result.token);
     console.log(`\n✅ Login successful`);
   } catch (error: unknown) {
     console.error(`\n❌ Login failed: ${getErrorMessage(error)}`);
