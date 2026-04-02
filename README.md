@@ -26,23 +26,33 @@ bash install.sh
 submit-dir login
 ```
 
-Select the site, browser opens automatically, login and done. Token is auto-saved. If you don't have an API token yet, one will be created automatically.
+Or choose a site explicitly:
+
+```bash
+submit-dir login --site aidirs.org
+submit-dir login --site backlinkdirs.com
+```
+
+Select the site, browser opens automatically, login and done. Tokens are auto-saved per site. If you don't have an API token yet, one will be created automatically.
 
 ## Usage
 
 ### Login
 ```bash
 submit-dir login
+submit-dir login --site backlinkdirs.com
 ```
 
 ### Submit a URL
 ```bash
 submit-dir submit https://example.com
+submit-dir submit https://example.com --site backlinkdirs.com
 ```
 
 ### Preview a URL (no record created)
 ```bash
 submit-dir fetch https://example.com
+submit-dir fetch https://example.com --site aidirs.org
 ```
 
 ### Show help
@@ -54,8 +64,8 @@ submit-dir --help
 
 | Command | Description |
 |---------|-------------|
-| `login` | Browser-based OAuth login (supports aidirs.org & backlinkdirs.com) |
-| `submit <url>` | Submit a URL to aidirs |
+| `login` | Browser-based login (supports aidirs.org & backlinkdirs.com) |
+| `submit <url>` | Submit a URL to the selected site |
 | `fetch <url>` | Preview a URL without creating a record |
 | `--help` | Show help |
 
@@ -65,14 +75,25 @@ submit-dir --help
 
 ```json
 {
-  "DIRS_TOKEN": "your-token-here",
-  "DIRS_BASE_URL": "https://aidirs.org"
+  "currentSite": "aidirs.org",
+  "sites": {
+    "aidirs.org": {
+      "token": "your-token-here",
+      "baseUrl": "https://aidirs.org"
+    },
+    "backlinkdirs.com": {
+      "token": "your-other-token",
+      "baseUrl": "https://backlinkdirs.com"
+    }
+  }
 }
 ```
 
+Legacy single-site config is migrated automatically on next login/use.
+
 ## Environment Variables
 
-Config file takes priority. Environment variables serve as fallback:
+Config file takes priority. Environment variables serve as fallback for the active or overridden site:
 
 ```bash
 export DIRS_TOKEN="your-token-here"

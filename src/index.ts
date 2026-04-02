@@ -4,55 +4,219 @@ import { Command } from 'commander';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as http from 'http';
-import { execSync } from 'child_process';
+import * as https from 'https';
+import { execFileSync } from 'child_process';
+import { randomBytes } from 'crypto';
 import inquirer from 'inquirer';
 
-const CONFIG_PATH = path.join(process.env.HOME || '', '.config', 'submit-dir', 'config.json');
+const DEFAULT_SITE = 'aidirs.org';
+const SUPPORTED_SITES = ['aidirs.org', 'backlinkdirs.com'] as const;
+type SupportedSite = (typeof SUPPORTED_SITES)[number];
 
-interface Config {
-  DIRS_TOKEN: string;
-  DIRS_BASE_URL: string;
+const SITE_BASE_URLS: Record<SupportedSite, string> = {
+  'aidirs.org': 'https://aidirs.org',
+  'backlinkdirs.com': 'https://backlinkdirs.com',
+};
+
+const SITE_AUTH_URLS: Record<SupportedSite, string> = {
+  'aidirs.org': 'https://aidirs.org/auth/login',
+  'backlinkdirs.com': 'https://backlinkdirs.com/auth/login',
+};
+
+const EXIT_CODES = {
+  GENERAL_ERROR: 1,
+  AUTH_ERROR: 2,
+  NETWORK_ERROR: 3,
+  API_ERROR: 4,
+} as const;
+
+const CONFIG_PATH = path.join(process.env.HOME || '', '.config', 'submit-dir', 'config.json');
+const REQUEST_TIMEOUT_MS = 15_000;
+const MAX_RETRIES = 2;
+
+interface LegacyConfig {
+  DIRS_TOKEN?: string;
+  DIRS_BASE_URL?: string;
 }
 
-async function loadConfig(): Promise<Config> {
-  // Config file takes priority, environment variables as fallback
+interface SiteConfig {
+  token: string;
+  baseUrl: string;
+}
+
+interface Config {
+  currentSite: SupportedSite;
+  sites: Partial<Record<SupportedSite, SiteConfig>>;
+}
+
+interface LoadConfigOptions {
+  site?: string;
+}
+
+interface LoadedConfig {
+  site: SupportedSite;
+  token: string;
+  baseUrl: string;
+}
+
+interface HttpResponse<T = unknown> {
+  status: number;
+  data: T;
+}
+
+class CliError extends Error {
+  constructor(
+    message: string,
+    public readonly exitCode: number = EXIT_CODES.GENERAL_ERROR,
+  ) {
+    super(message);
+    this.name = 'CliError';
+  }
+}
+
+class HttpError extends CliError {
+  constructor(
+    message: string,
+    public readonly status: number,
+    public readonly data: unknown,
+    exitCode: number = EXIT_CODES.API_ERROR,
+  ) {
+    super(message, exitCode);
+    this.name = 'HttpError';
+  }
+}
+
+function normalizeSite(site: string | undefined): SupportedSite {
+  if (!site) return DEFAULT_SITE;
+
+  if ((SUPPORTED_SITES as readonly string[]).includes(site)) {
+    return site as SupportedSite;
+  }
+
+  throw new CliError(
+    `Unsupported site '${site}'. Use one of: ${SUPPORTED_SITES.join(', ')}`,
+    EXIT_CODES.GENERAL_ERROR,
+  );
+}
+
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/$/, '');
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
+function parseJsonSafely(body: string): unknown {
+  try {
+    return JSON.parse(body);
+  } catch {
+    return body;
+  }
+}
+
+function getSiteFromBaseUrl(baseUrl?: string): SupportedSite {
+  if (!baseUrl) return DEFAULT_SITE;
+
+  const normalized = normalizeBaseUrl(baseUrl);
+  const matchedEntry = Object.entries(SITE_BASE_URLS).find(([, value]) => value === normalized);
+  return (matchedEntry?.[0] as SupportedSite | undefined) ?? DEFAULT_SITE;
+}
+
+async function readConfigFile(): Promise<Config | null> {
+  if (!(await fs.pathExists(CONFIG_PATH))) {
+    return null;
+  }
+
+  const rawConfig = (await fs.readJson(CONFIG_PATH)) as Partial<Config & LegacyConfig>;
+
+  if (rawConfig.sites && rawConfig.currentSite) {
+    return {
+      currentSite: normalizeSite(rawConfig.currentSite),
+      sites: rawConfig.sites,
+    };
+  }
+
+  const legacyToken = rawConfig.DIRS_TOKEN;
+  if (!legacyToken) {
+    return null;
+  }
+
+  const legacySite = getSiteFromBaseUrl(rawConfig.DIRS_BASE_URL);
+  return {
+    currentSite: legacySite,
+    sites: {
+      [legacySite]: {
+        token: legacyToken,
+        baseUrl: SITE_BASE_URLS[legacySite],
+      },
+    },
+  };
+}
+
+async function writeConfig(config: Config): Promise<void> {
+  await fs.ensureFile(CONFIG_PATH);
+  await fs.writeJson(CONFIG_PATH, config, { spaces: 2 });
+}
+
+async function loadConfig(options: LoadConfigOptions = {}): Promise<LoadedConfig> {
   const envToken = process.env.DIRS_TOKEN;
   const envBaseUrl = process.env.DIRS_BASE_URL;
+  const requestedSite = options.site ? normalizeSite(options.site) : undefined;
+  const fileConfig = await readConfigFile();
 
-  if (!(await fs.pathExists(CONFIG_PATH)) && !envToken) {
-    throw new Error(`Not logged in. Run 'submit-dir login' first.`);
-  }
-  let token = '';
-  let baseUrl = 'https://aidirs.org';
+  const site = requestedSite ?? fileConfig?.currentSite ?? getSiteFromBaseUrl(envBaseUrl);
+  const siteFromFile = fileConfig?.sites?.[site];
 
-  if (await fs.pathExists(CONFIG_PATH)) {
-    const config = await fs.readJson(CONFIG_PATH);
-    token = config.DIRS_TOKEN || envToken || '';
-    baseUrl = (config.DIRS_BASE_URL || envBaseUrl || 'https://aidirs.org').replace(/\/$/, '');
-  } else {
-    token = envToken || '';
-    baseUrl = (envBaseUrl || 'https://aidirs.org').replace(/\/$/, '');
-  }
+  const token = siteFromFile?.token || envToken || '';
+  const baseUrl = normalizeBaseUrl(siteFromFile?.baseUrl || envBaseUrl || SITE_BASE_URLS[site]);
 
   if (!token) {
-    throw new Error(`DIRS_TOKEN not found. Set DIRS_TOKEN env var or run 'submit-dir login' first.`);
+    throw new CliError(
+      `No token configured for ${site}. Run 'submit-dir login --site ${site}' first or set DIRS_TOKEN.`,
+      EXIT_CODES.AUTH_ERROR,
+    );
   }
-  return { DIRS_TOKEN: token, DIRS_BASE_URL: baseUrl };
+
+  return { site, token, baseUrl };
 }
 
 function openBrowser(url: string) {
   const platform = process.platform;
+
   if (platform === 'darwin') {
-    execSync(`open "${url}"`, { stdio: 'ignore' });
-  } else if (platform === 'linux') {
-    execSync(`xdg-open "${url}"`, { stdio: 'ignore' });
-  } else {
-    execSync(`start "" "${url}"`, { stdio: 'ignore' });
+    execFileSync('open', [url], { stdio: 'ignore' });
+    return;
   }
+
+  if (platform === 'linux') {
+    execFileSync('xdg-open', [url], { stdio: 'ignore' });
+    return;
+  }
+
+  if (platform === 'win32') {
+    execFileSync('cmd', ['/c', 'start', '', url], { stdio: 'ignore' });
+    return;
+  }
+
+  throw new CliError(`Unsupported platform: ${platform}`);
 }
 
-function waitForCallback(port: number): Promise<{ token: string; baseUrl: string }> {
+function waitForCallback(
+  port: number,
+  expectedSite: SupportedSite,
+  expectedState: string,
+): Promise<{ token: string; site: SupportedSite }> {
   return new Promise((resolve, reject) => {
+    let settled = false;
+
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      server.close(() => callback());
+    };
+
     const server = http.createServer((req, res) => {
       if (req.method !== 'GET') {
         res.writeHead(404);
@@ -60,9 +224,24 @@ function waitForCallback(port: number): Promise<{ token: string; baseUrl: string
         return;
       }
 
-      const url = new URL(req.url!, `http://localhost:${port}`);
-      const token = url.searchParams.get('token');
-      const site = url.searchParams.get('site') || 'aidirs.org';
+      const requestUrl = new URL(req.url || '/', `http://localhost:${port}`);
+      const token = requestUrl.searchParams.get('token');
+      const site = normalizeSite(requestUrl.searchParams.get('site') || expectedSite);
+      const state = requestUrl.searchParams.get('state');
+
+      if (state !== expectedState) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end('<html><body><h2>Invalid login state</h2></body></html>');
+        finish(() => reject(new CliError('Login failed: invalid callback state.', EXIT_CODES.AUTH_ERROR)));
+        return;
+      }
+
+      if (site !== expectedSite) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end('<html><body><h2>Login site mismatch</h2></body></html>');
+        finish(() => reject(new CliError('Login failed: callback site mismatch.', EXIT_CODES.AUTH_ERROR)));
+        return;
+      }
 
       if (token) {
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -71,26 +250,23 @@ function waitForCallback(port: number): Promise<{ token: string; baseUrl: string
           <p style="color:#666;">Token saved. You can close this window.</p>
           <script>window.close()</script>
         </body></html>`);
-        server.close();
-        const baseUrl = site === 'backlinkdirs.com' ? 'https://backlinkdirs.com' : 'https://aidirs.org';
-        resolve({ token, baseUrl });
-      } else {
-        const error = url.searchParams.get('error') || 'Unknown error';
-        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-        res.end(`<html><body style="font-family:sans-serif;padding:40px;text-align:center;">
-          <h2 style="color:#ef4444;">❌ Login failed</h2>
-          <p style="color:#666;">${error}</p>
-        </body></html>`);
-        server.close();
-        reject(new Error(error));
+        finish(() => resolve({ token, site }));
+        return;
       }
+
+      const error = requestUrl.searchParams.get('error') || 'Unknown error';
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(`<html><body style="font-family:sans-serif;padding:40px;text-align:center;">
+        <h2 style="color:#ef4444;">❌ Login failed</h2>
+        <p style="color:#666;">${error}</p>
+      </body></html>`);
+      finish(() => reject(new CliError(error, EXIT_CODES.AUTH_ERROR)));
     });
 
-    server.listen(port, '127.0.0.1', () => {});
+    server.listen(port, '127.0.0.1');
 
     setTimeout(() => {
-      server.close();
-      reject(new Error('Login timeout (5 minutes). Please try again.'));
+      finish(() => reject(new CliError('Login timeout (5 minutes). Please try again.', EXIT_CODES.AUTH_ERROR)));
     }, 5 * 60 * 1000);
   });
 }
@@ -99,35 +275,59 @@ function getAvailablePort(start: number): Promise<number> {
   return new Promise((resolve) => {
     const server = http.createServer();
     server.listen(start, '127.0.0.1', () => {
-      const port = (server.address() as any).port;
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : start;
       server.close(() => resolve(port));
     });
     server.on('error', () => resolve(getAvailablePort(start + 1)));
   });
 }
 
-async function login() {
-  const inq = (inquirer as any).createPromptModule();
-  const { site } = await inq([
-    {
-      type: 'list',
-      name: 'site',
-      message: 'Which site do you want to login to?',
-      choices: [
-        { name: 'aidirs.org', value: 'aidirs.org' },
-        { name: 'backlinkdirs.com', value: 'backlinkdirs.com' },
-      ],
-    },
-  ]);
+function validateUrl(input: string): string {
+  let parsed: URL;
 
-  const authUrls: Record<string, string> = {
-    'aidirs.org': 'https://aidirs.org/auth/login',
-    'backlinkdirs.com': 'https://backlinkdirs.com/auth/login',
+  try {
+    parsed = new URL(input);
+  } catch {
+    throw new CliError(`Invalid URL: ${input}`, EXIT_CODES.GENERAL_ERROR);
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new CliError(`Unsupported URL protocol: ${parsed.protocol}`, EXIT_CODES.GENERAL_ERROR);
+  }
+
+  return parsed.toString();
+}
+
+async function saveSiteConfig(site: SupportedSite, token: string): Promise<void> {
+  const existing = (await readConfigFile()) ?? {
+    currentSite: site,
+    sites: {},
   };
+
+  const nextConfig: Config = {
+    currentSite: site,
+    sites: {
+      ...existing.sites,
+      [site]: {
+        token,
+        baseUrl: SITE_BASE_URLS[site],
+      },
+    },
+  };
+
+  await writeConfig(nextConfig);
+}
+
+async function login(options: { site?: string }) {
+  const site = options.site
+    ? normalizeSite(options.site)
+    : await promptForSite();
 
   const port = await getAvailablePort(38492);
   const callbackUrl = `http://localhost:${port}/callback`;
-  const authUrl = `${authUrls[site]}?callback=${encodeURIComponent(callbackUrl)}`;
+  const state = randomBytes(24).toString('hex');
+  const authUrl = `${SITE_AUTH_URLS[site]}?callback=${encodeURIComponent(callbackUrl)}&state=${encodeURIComponent(state)}`;
 
   console.log(`\n🔐 Opening browser to login to ${site}...`);
   console.log(`   Waiting for callback on localhost:${port}\n`);
@@ -135,78 +335,141 @@ async function login() {
   openBrowser(authUrl);
 
   try {
-    const { token, baseUrl } = await waitForCallback(port);
-
-    const config: Config = {
-      DIRS_TOKEN: token,
-      DIRS_BASE_URL: baseUrl,
-    };
-
-    await fs.ensureFile(CONFIG_PATH);
-    await fs.writeJson(CONFIG_PATH, config, { spaces: 2 });
+    const { token } = await waitForCallback(port, site, state);
+    await saveSiteConfig(site, token);
     console.log(`\n✅ Login saved to ${CONFIG_PATH}`);
-  } catch (err: any) {
-    console.error(`\n❌ Login failed: ${err.message}`);
-    process.exit(1);
+  } catch (error: unknown) {
+    console.error(`\n❌ Login failed: ${getErrorMessage(error)}`);
+    process.exit(error instanceof CliError ? error.exitCode : EXIT_CODES.AUTH_ERROR);
   }
 }
 
-async function httpPost(baseUrl: string, token: string, endpoint: string, body: object): Promise<unknown> {
+async function promptForSite(): Promise<SupportedSite> {
+  const inq = (inquirer as unknown as { createPromptModule: () => (questions: unknown[]) => Promise<{ site: SupportedSite }> }).createPromptModule();
+  const { site } = await inq([
+    {
+      type: 'list',
+      name: 'site',
+      message: 'Which site do you want to login to?',
+      choices: SUPPORTED_SITES.map((value) => ({ name: value, value })),
+    },
+  ]);
+
+  return site;
+}
+
+async function httpPost(
+  baseUrl: string,
+  token: string,
+  endpoint: string,
+  body: object,
+): Promise<HttpResponse> {
   const url = new URL(endpoint, baseUrl);
-  const httpMod = url.protocol === 'https:' ? require('https') : require('http');
+  const transport = url.protocol === 'https:' ? https : http;
 
-  return new Promise((resolve, reject) => {
-    const data = JSON.stringify(body);
-    const req = httpMod.request({
-      hostname: url.hostname,
-      port: url.port,
-      path: url.pathname,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(data),
-        'Authorization': `Bearer ${token}`,
-      },
-    }, (res: any) => {
-      let body = '';
-      res.on('data', (chunk: string) => { body += chunk; });
-      res.on('end', () => {
-        try {
-          resolve({ status: res.statusCode, data: JSON.parse(body) });
-        } catch {
-          resolve({ status: res.statusCode, data: body });
-        }
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
+    try {
+      return await new Promise<HttpResponse>((resolve, reject) => {
+        const data = JSON.stringify(body);
+        const req = transport.request(
+          {
+            hostname: url.hostname,
+            port: url.port,
+            path: `${url.pathname}${url.search}`,
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(data),
+              Authorization: `Bearer ${token}`,
+            },
+          },
+          (res) => {
+            let responseBody = '';
+            res.setEncoding('utf8');
+            res.on('data', (chunk) => {
+              responseBody += chunk;
+            });
+            res.on('end', () => {
+              const parsed = parseJsonSafely(responseBody);
+              const status = res.statusCode ?? 500;
+
+              if (status < 200 || status >= 300) {
+                reject(
+                  new HttpError(
+                    `Request failed with status ${status}`,
+                    status,
+                    parsed,
+                    status === 401 || status === 403 ? EXIT_CODES.AUTH_ERROR : EXIT_CODES.API_ERROR,
+                  ),
+                );
+                return;
+              }
+
+              resolve({ status, data: parsed });
+            });
+          },
+        );
+
+        req.setTimeout(REQUEST_TIMEOUT_MS, () => {
+          req.destroy(new CliError(`Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`, EXIT_CODES.NETWORK_ERROR));
+        });
+
+        req.on('error', (error) => {
+          reject(
+            error instanceof CliError
+              ? error
+              : new CliError(`Network request failed: ${getErrorMessage(error)}`, EXIT_CODES.NETWORK_ERROR),
+          );
+        });
+
+        req.write(data);
+        req.end();
       });
-    });
-    req.on('error', reject);
-    req.write(data);
-    req.end();
-  });
+    } catch (error) {
+      const shouldRetry = attempt < MAX_RETRIES && error instanceof CliError && error.exitCode === EXIT_CODES.NETWORK_ERROR;
+      if (!shouldRetry) {
+        throw error;
+      }
+    }
+  }
+
+  throw new CliError('Request failed after retries.', EXIT_CODES.NETWORK_ERROR);
 }
 
-async function submit(url: string) {
-  const config = await loadConfig();
-  console.log(`Submitting ${url} to ${config.DIRS_BASE_URL}...`);
+function printResult(result: HttpResponse): void {
+  console.log(`Status: ${result.status}`);
+  console.log('Response:', JSON.stringify(result.data, null, 2));
+}
+
+async function submit(targetUrl: string, options: { site?: string }) {
   try {
-    const result = await httpPost(config.DIRS_BASE_URL, config.DIRS_TOKEN, '/api/submit', { link: url }) as any;
-    console.log(`Status: ${result.status}`);
-    console.log('Response:', JSON.stringify(result.data, null, 2));
-  } catch (err: any) {
-    console.error(`❌ Error: ${err.message}`);
-    process.exit(1);
+    const validUrl = validateUrl(targetUrl);
+    const config = await loadConfig({ site: options.site });
+    console.log(`Submitting ${validUrl} to ${config.baseUrl}...`);
+    const result = await httpPost(config.baseUrl, config.token, '/api/submit', { link: validUrl });
+    printResult(result);
+  } catch (error: unknown) {
+    console.error(`❌ Error: ${getErrorMessage(error)}`);
+    if (error instanceof HttpError && error.data) {
+      console.error(JSON.stringify(error.data, null, 2));
+    }
+    process.exit(error instanceof CliError ? error.exitCode : EXIT_CODES.GENERAL_ERROR);
   }
 }
 
-async function fetch(url: string) {
-  const config = await loadConfig();
-  console.log(`Fetching preview for ${url} from ${config.DIRS_BASE_URL}...`);
+async function fetchPreview(targetUrl: string, options: { site?: string }) {
   try {
-    const result = await httpPost(config.DIRS_BASE_URL, config.DIRS_TOKEN, '/api/fetch-website', { link: url }) as any;
-    console.log(`Status: ${result.status}`);
-    console.log('Response:', JSON.stringify(result.data, null, 2));
-  } catch (err: any) {
-    console.error(`❌ Error: ${err.message}`);
-    process.exit(1);
+    const validUrl = validateUrl(targetUrl);
+    const config = await loadConfig({ site: options.site });
+    console.log(`Fetching preview for ${validUrl} from ${config.baseUrl}...`);
+    const result = await httpPost(config.baseUrl, config.token, '/api/fetch-website', { link: validUrl });
+    printResult(result);
+  } catch (error: unknown) {
+    console.error(`❌ Error: ${getErrorMessage(error)}`);
+    if (error instanceof HttpError && error.data) {
+      console.error(JSON.stringify(error.data, null, 2));
+    }
+    process.exit(error instanceof CliError ? error.exitCode : EXIT_CODES.GENERAL_ERROR);
   }
 }
 
@@ -220,21 +483,23 @@ program
 program
   .command('login')
   .description('Login via browser (supports aidirs.org and backlinkdirs.com)')
+  .option('--site <site>', `Site to login to (${SUPPORTED_SITES.join(', ')})`)
   .action(login);
 
 program
   .command('submit <url>')
-  .description('Submit a URL to aidirs')
+  .description('Submit a URL to the selected site')
+  .option('--site <site>', `Override configured site (${SUPPORTED_SITES.join(', ')})`)
   .action(submit);
 
 program
   .command('fetch <url>')
   .description('Preview a URL without creating a record')
-  .action(fetch);
+  .option('--site <site>', `Override configured site (${SUPPORTED_SITES.join(', ')})`)
+  .action(fetchPreview);
 
 program.parse(process.argv);
 
-// Show help if no command provided
 if (process.argv.length === 2) {
   program.help();
 }
