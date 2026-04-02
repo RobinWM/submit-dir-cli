@@ -520,7 +520,7 @@ async function login(options) {
     try {
         const { token } = await waitForCallback(port, site, state);
         await saveSiteConfig(site, token);
-        console.log(`\n✅ Login saved to ${CONFIG_PATH}`);
+        console.log(`\n✅ Login successful`);
     }
     catch (error) {
         console.error(`\n❌ Login failed: ${getErrorMessage(error)}`);

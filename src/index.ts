@@ -632,7 +632,7 @@ async function login(options: { site?: string }) {
   try {
     const { token } = await waitForCallback(port, site, state);
     await saveSiteConfig(site, token);
-    console.log(`\n✅ Login saved to ${CONFIG_PATH}`);
+    console.log(`\n✅ Login successful`);
   } catch (error: unknown) {
     console.error(`\n❌ Login failed: ${getErrorMessage(error)}`);
     process.exit(error instanceof CliError ? error.exitCode : EXIT_CODES.AUTH_ERROR);
