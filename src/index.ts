@@ -587,7 +587,7 @@ async function getLatestReleaseInfo(options: { useCache?: boolean } = {}): Promi
   return latest;
 }
 
-async function maybeNotifyUpdate(): Promise<void> {
+async function maybeNotifyUpdate(options: { silent?: boolean; json?: boolean; quiet?: boolean } = {}): Promise<void> {
   if (process.env.TEST_SUBMIT_DIR_SKIP_UPDATE_CHECK === '1') {
     return;
   }
@@ -595,7 +595,9 @@ async function maybeNotifyUpdate(): Promise<void> {
   try {
     const latest = await getLatestReleaseInfo({ useCache: true });
     if (compareVersions(latest.version, CLI_VERSION) > 0) {
-      console.log(`ℹ️  Update available: v${latest.version} (current v${CLI_VERSION}). Run 'submit-dir self-update'.`);
+      if (!options.silent && !options.json && !options.quiet) {
+        console.log(`ℹ️  Update available: v${latest.version} (current v${CLI_VERSION}). Run 'submit-dir self-update'.`);
+      }
     }
   } catch {
     // Ignore update check failures silently.
@@ -837,7 +839,7 @@ async function selfUpdate(options: { json?: boolean }) {
 
 async function submit(targetUrl: string, options: { site?: string; json?: boolean; quiet?: boolean }) {
   try {
-    await maybeNotifyUpdate();
+    await maybeNotifyUpdate({ json: options.json, quiet: options.quiet });
     const validUrl = validateUrl(targetUrl);
     const config = await loadConfig({ site: options.site });
 
@@ -854,7 +856,7 @@ async function submit(targetUrl: string, options: { site?: string; json?: boolea
 
 async function fetchPreview(targetUrl: string, options: { site?: string; json?: boolean; quiet?: boolean }) {
   try {
-    await maybeNotifyUpdate();
+    await maybeNotifyUpdate({ json: options.json, quiet: options.quiet });
     const validUrl = validateUrl(targetUrl);
     const config = await loadConfig({ site: options.site });
 

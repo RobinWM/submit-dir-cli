@@ -123,15 +123,29 @@ verify_binary() {
 install_release_binary() {
   local os="$1"
   local arch="$2"
-  local temp_binary="$TEMP_DIR/submit-dir"
-  local release_url="${RELEASE_BASE_URL}/submit-dir-${os}-${arch}"
+  local asset_name="submit-dir-${os}-${arch}"
+  local temp_binary="$TEMP_DIR/$asset_name"
+  local release_url="${RELEASE_BASE_URL}/${asset_name}"
 
   if ! try_download_file "$release_url" "$temp_binary"; then
     return 1
   fi
 
-  chmod +x "$temp_binary"
+  chmod +x "$temp_binary" 2>/dev/null || true
   verify_binary "$temp_binary"
+
+  if [ "$os" = "windows" ]; then
+    cp "$temp_binary" "$TARGET_BIN.exe"
+    cat > "$TARGET_BIN" <<'EOF'
+#!/bin/sh
+DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+exec "$DIR/submit-dir.exe" "$@"
+EOF
+    chmod +x "$TARGET_BIN"
+    log "✅ Installed release binary to $TARGET_BIN.exe"
+    return 0
+  fi
+
   mv "$temp_binary" "$TARGET_BIN"
   chmod +x "$TARGET_BIN"
   log "✅ Installed release binary to $TARGET_BIN"
@@ -166,18 +180,19 @@ install_from_npm_package() {
   fi
 
   log "Installing published package..."
-  npm install -g "$package_tgz"
+  local package_dir="$INSTALL_DIR/package"
+  rm -rf "$package_dir"
+  mkdir -p "$package_dir"
+  tar -xzf "$package_tgz" -C "$package_dir"
 
-  local global_bin_dir
-  global_bin_dir="$(find_npm_global_bin)"
-
-  if [ ! -x "$global_bin_dir/submit-dir" ]; then
-    log "submit-dir binary not found after npm package install"
+  if [ ! -f "$package_dir/package/dist/index.js" ]; then
+    log "Published package is missing dist/index.js"
     exit 1
   fi
 
-  ln -sf "$global_bin_dir/submit-dir" "$TARGET_BIN"
-  log "✅ Installed npm package to $TARGET_BIN"
+  cp "$package_dir/package/dist/index.js" "$TARGET_BIN"
+  chmod +x "$TARGET_BIN"
+  log "✅ Installed package payload to $TARGET_BIN"
   return 0
 }
 
@@ -190,23 +205,10 @@ install_from_source() {
   cd "$TEMP_DIR/repo"
   npm install
   npm run build
-  npm pack >/dev/null
 
-  local package_tgz
-  package_tgz="$(ls submit-dir-*.tgz | head -n 1)"
-
-  npm install -g "$package_tgz"
-
-  local global_bin_dir
-  global_bin_dir="$(find_npm_global_bin)"
-
-  if [ ! -x "$global_bin_dir/submit-dir" ]; then
-    log "submit-dir binary not found after source install"
-    exit 1
-  fi
-
-  ln -sf "$global_bin_dir/submit-dir" "$TARGET_BIN"
-  log "✅ Installed source-built package to $TARGET_BIN"
+  cp dist/index.js "$TARGET_BIN"
+  chmod +x "$TARGET_BIN"
+  log "✅ Installed source-built CLI to $TARGET_BIN"
 }
 
 main() {

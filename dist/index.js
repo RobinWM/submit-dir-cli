@@ -480,14 +480,16 @@ async function getLatestReleaseInfo(options = {}) {
     });
     return latest;
 }
-async function maybeNotifyUpdate() {
+async function maybeNotifyUpdate(options = {}) {
     if (process.env.TEST_SUBMIT_DIR_SKIP_UPDATE_CHECK === '1') {
         return;
     }
     try {
         const latest = await getLatestReleaseInfo({ useCache: true });
         if (compareVersions(latest.version, CLI_VERSION) > 0) {
-            console.log(`ℹ️  Update available: v${latest.version} (current v${CLI_VERSION}). Run 'submit-dir self-update'.`);
+            if (!options.silent && !options.json && !options.quiet) {
+                console.log(`ℹ️  Update available: v${latest.version} (current v${CLI_VERSION}). Run 'submit-dir self-update'.`);
+            }
         }
     }
     catch {
@@ -685,7 +687,7 @@ async function selfUpdate(options) {
 }
 async function submit(targetUrl, options) {
     try {
-        await maybeNotifyUpdate();
+        await maybeNotifyUpdate({ json: options.json, quiet: options.quiet });
         const validUrl = validateUrl(targetUrl);
         const config = await loadConfig({ site: options.site });
         if (!options.json && !options.quiet) {
@@ -700,7 +702,7 @@ async function submit(targetUrl, options) {
 }
 async function fetchPreview(targetUrl, options) {
     try {
-        await maybeNotifyUpdate();
+        await maybeNotifyUpdate({ json: options.json, quiet: options.quiet });
         const validUrl = validateUrl(targetUrl);
         const config = await loadConfig({ site: options.site });
         if (!options.json && !options.quiet) {
