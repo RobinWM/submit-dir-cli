@@ -124,6 +124,9 @@ install_release_binary() {
   local os="$1"
   local arch="$2"
   local asset_name="submit-dir-${os}-${arch}"
+  if [ "$os" = "windows" ]; then
+    asset_name="submit-dir-windows-${arch}"
+  fi
   local temp_binary="$TEMP_DIR/$asset_name"
   local release_url="${RELEASE_BASE_URL}/${asset_name}"
 

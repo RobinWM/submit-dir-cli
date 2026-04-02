@@ -14,6 +14,9 @@ on:
 permissions:
   contents: write
 
+env:
+  RELEASE_REPO: RobinWM/submit-dir-cli
+
 jobs:
   build-release-assets:
     strategy:
@@ -34,7 +37,7 @@ jobs:
             asset_name: submit-dir-darwin-arm64
           - os: windows-latest
             target: node20-win-x64
-            asset_name: submit-dir-windows-x64.exe
+            asset_name: submit-dir-windows-x64
     runs-on: ${{ matrix.os }}
     env:
       RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
@@ -61,7 +64,8 @@ jobs:
       - name: Upload binary to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$RELEASE_TAG" release-assets/${{ matrix.asset_name }} --clobber
+        shell: bash
+        run: gh release upload "$RELEASE_TAG" release-assets/${{ matrix.asset_name }} --repo "$RELEASE_REPO" --clobber
 
   upload-package:
     runs-on: ubuntu-latest
@@ -91,4 +95,5 @@ jobs:
       - name: Upload tarballs to release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "$RELEASE_TAG" "$PACKAGE_TGZ" submit-dir-latest.tgz --clobber
+        shell: bash
+        run: gh release upload "$RELEASE_TAG" "$PACKAGE_TGZ" submit-dir-latest.tgz --repo "$RELEASE_REPO" --clobber
