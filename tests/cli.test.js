@@ -106,13 +106,13 @@ test('login on linux prints manual instructions without trying to open browser',
       HOME: fs.mkdtempSync(path.join(os.tmpdir(), 'ship-test-')),
       PATH: '',
     },
-    input: '\n',
+    input: '\n\n',
     encoding: 'utf8',
     timeout: 5000,
   });
 
-  assert.equal(result.status, 2);
   assert.match(result.stdout, /Open this URL manually:/);
-  assert.match(result.stdout, /paste it here/i);
+  assert.match(result.stdout, /required/i);
+  assert.match(result.stderr, /Callback URL is required/);
   assert.doesNotMatch(result.stderr, /Failed to open browser automatically/);
 });

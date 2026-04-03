@@ -62,31 +62,40 @@ async function promptForSite() {
 async function promptForManualCallback(expectedSite, expectedState) {
     const rl = readline.createInterface({ input: process_1.stdin, output: process_1.stdout });
     try {
-        const callbackInput = await rl.question('\nPaste the localhost callback URL after login:\n');
-        const callbackUrl = new URL(callbackInput.trim());
-        const token = callbackUrl.searchParams.get('token');
-        const site = (0, sites_1.normalizeSite)(callbackUrl.searchParams.get('site') || expectedSite);
-        const state = callbackUrl.searchParams.get('state');
-        const error = callbackUrl.searchParams.get('error');
-        if (state !== expectedState) {
-            throw new errors_1.CliError('Login failed: invalid callback state.', errors_1.EXIT_CODES.AUTH_ERROR);
+        while (true) {
+            const callbackInput = await rl.question('\nPaste the localhost callback URL after login (required):\n');
+            const trimmed = callbackInput.trim();
+            if (!trimmed) {
+                console.error('Callback URL is required. Paste the full localhost callback URL from your browser.');
+                continue;
+            }
+            try {
+                const callbackUrl = new URL(trimmed);
+                const token = callbackUrl.searchParams.get('token');
+                const site = (0, sites_1.normalizeSite)(callbackUrl.searchParams.get('site') || expectedSite);
+                const state = callbackUrl.searchParams.get('state');
+                const error = callbackUrl.searchParams.get('error');
+                if (state !== expectedState) {
+                    throw new errors_1.CliError('Login failed: invalid callback state.', errors_1.EXIT_CODES.AUTH_ERROR);
+                }
+                if (site !== expectedSite) {
+                    throw new errors_1.CliError('Login failed: callback site mismatch.', errors_1.EXIT_CODES.AUTH_ERROR);
+                }
+                if (error) {
+                    throw new errors_1.CliError(error, errors_1.EXIT_CODES.AUTH_ERROR);
+                }
+                if (!token) {
+                    throw new errors_1.CliError('Login failed: missing token in callback URL.', errors_1.EXIT_CODES.AUTH_ERROR);
+                }
+                return { token, site };
+            }
+            catch (error) {
+                if (error instanceof errors_1.CliError) {
+                    throw error;
+                }
+                console.error(`Invalid callback URL: ${(0, errors_1.getErrorMessage)(error)}`);
+            }
         }
-        if (site !== expectedSite) {
-            throw new errors_1.CliError('Login failed: callback site mismatch.', errors_1.EXIT_CODES.AUTH_ERROR);
-        }
-        if (error) {
-            throw new errors_1.CliError(error, errors_1.EXIT_CODES.AUTH_ERROR);
-        }
-        if (!token) {
-            throw new errors_1.CliError('Login failed: missing token in callback URL.', errors_1.EXIT_CODES.AUTH_ERROR);
-        }
-        return { token, site };
-    }
-    catch (error) {
-        if (error instanceof errors_1.CliError) {
-            throw error;
-        }
-        throw new errors_1.CliError(`Invalid callback URL: ${(0, errors_1.getErrorMessage)(error)}`, errors_1.EXIT_CODES.AUTH_ERROR);
     }
     finally {
         rl.close();

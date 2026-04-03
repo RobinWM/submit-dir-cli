@@ -27,36 +27,47 @@ async function promptForManualCallback(expectedSite: SupportedSite, expectedStat
   const rl = readline.createInterface({ input, output });
 
   try {
-    const callbackInput = await rl.question('\nPaste the localhost callback URL after login:\n');
-    const callbackUrl = new URL(callbackInput.trim());
-    const token = callbackUrl.searchParams.get('token');
-    const site = normalizeSite(callbackUrl.searchParams.get('site') || expectedSite);
-    const state = callbackUrl.searchParams.get('state');
-    const error = callbackUrl.searchParams.get('error');
+    while (true) {
+      const callbackInput = await rl.question('\nPaste the localhost callback URL after login (required):\n');
+      const trimmed = callbackInput.trim();
 
-    if (state !== expectedState) {
-      throw new CliError('Login failed: invalid callback state.', EXIT_CODES.AUTH_ERROR);
+      if (!trimmed) {
+        console.error('Callback URL is required. Paste the full localhost callback URL from your browser.');
+        continue;
+      }
+
+      try {
+        const callbackUrl = new URL(trimmed);
+        const token = callbackUrl.searchParams.get('token');
+        const site = normalizeSite(callbackUrl.searchParams.get('site') || expectedSite);
+        const state = callbackUrl.searchParams.get('state');
+        const error = callbackUrl.searchParams.get('error');
+
+        if (state !== expectedState) {
+          throw new CliError('Login failed: invalid callback state.', EXIT_CODES.AUTH_ERROR);
+        }
+
+        if (site !== expectedSite) {
+          throw new CliError('Login failed: callback site mismatch.', EXIT_CODES.AUTH_ERROR);
+        }
+
+        if (error) {
+          throw new CliError(error, EXIT_CODES.AUTH_ERROR);
+        }
+
+        if (!token) {
+          throw new CliError('Login failed: missing token in callback URL.', EXIT_CODES.AUTH_ERROR);
+        }
+
+        return { token, site };
+      } catch (error) {
+        if (error instanceof CliError) {
+          throw error;
+        }
+
+        console.error(`Invalid callback URL: ${getErrorMessage(error)}`);
+      }
     }
-
-    if (site !== expectedSite) {
-      throw new CliError('Login failed: callback site mismatch.', EXIT_CODES.AUTH_ERROR);
-    }
-
-    if (error) {
-      throw new CliError(error, EXIT_CODES.AUTH_ERROR);
-    }
-
-    if (!token) {
-      throw new CliError('Login failed: missing token in callback URL.', EXIT_CODES.AUTH_ERROR);
-    }
-
-    return { token, site };
-  } catch (error) {
-    if (error instanceof CliError) {
-      throw error;
-    }
-
-    throw new CliError(`Invalid callback URL: ${getErrorMessage(error)}`, EXIT_CODES.AUTH_ERROR);
   } finally {
     rl.close();
   }
