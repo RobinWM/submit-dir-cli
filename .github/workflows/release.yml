@@ -66,8 +66,13 @@ jobs:
           npm run build
           mkdir -p release-assets
           npx pkg dist/index.js --targets ${{ matrix.target }} --output release-assets/${{ matrix.asset_name }}
-          if [ "${{ matrix.asset_name }}" != "${{ matrix.upload_name }}" ]; then
-            cp "release-assets/${{ matrix.asset_name }}" "release-assets/${{ matrix.upload_name }}"
+          source_path="release-assets/${{ matrix.asset_name }}"
+          target_path="release-assets/${{ matrix.upload_name }}"
+          if [ ! -f "$source_path" ] && [ -f "${source_path}.exe" ]; then
+            source_path="${source_path}.exe"
+          fi
+          if [ "$source_path" != "$target_path" ]; then
+            cp "$source_path" "$target_path"
           fi
 
       - name: Upload binary to release
