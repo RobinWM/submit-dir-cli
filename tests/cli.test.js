@@ -47,7 +47,7 @@ test('version command prints current version', () => {
 test('package metadata uses scoped npm package name while keeping ship binary', () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'));
   assert.equal(packageJson.name, '@brenn/ship');
-  assert.equal(packageJson.bin.ship, './dist/index.js');
+  assert.equal(packageJson.bin.ship, 'dist/index.js');
   assert.equal(packageJson.publishConfig.access, 'public');
 });
 

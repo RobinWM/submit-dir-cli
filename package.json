@@ -4,7 +4,7 @@
   "description": "CLI for shipping, submitting, and managing site growth workflows across aidirs.org and backlinkdirs.com.",
   "main": "dist/index.js",
   "bin": {
-    "ship": "./dist/index.js"
+    "ship": "dist/index.js"
   },
   "files": [
     "dist",
