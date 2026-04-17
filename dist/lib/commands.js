@@ -16,7 +16,7 @@ async function submit(cliVersion, targetUrl, options) {
             console.log(`Submitting ${validUrl} to ${config.baseUrl}...`);
         }
         const result = await (0, http_1.httpPost)(config.baseUrl, config.token, '/api/submit', { link: validUrl });
-        (0, output_1.printResult)(result, options);
+        (0, output_1.printResult)(result, options, config.baseUrl);
     }
     catch (error) {
         (0, output_1.printCommandError)(error, options);
@@ -31,7 +31,7 @@ async function fetchPreview(cliVersion, targetUrl, options) {
             console.log(`Fetching preview for ${validUrl} from ${config.baseUrl}...`);
         }
         const result = await (0, http_1.httpPost)(config.baseUrl, config.token, '/api/fetch-website', { link: validUrl });
-        (0, output_1.printResult)(result, options);
+        (0, output_1.printResult)(result, options, config.baseUrl);
     }
     catch (error) {
         (0, output_1.printCommandError)(error, options);

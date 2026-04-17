@@ -15,7 +15,7 @@ export async function submit(cliVersion: string, targetUrl: string, options: { s
     }
 
     const result: HttpResponse = await httpPost(config.baseUrl, config.token, '/api/submit', { link: validUrl });
-    printResult(result, options);
+    printResult(result, options, config.baseUrl);
   } catch (error: unknown) {
     printCommandError(error, options);
   }
@@ -32,7 +32,7 @@ export async function fetchPreview(cliVersion: string, targetUrl: string, option
     }
 
     const result: HttpResponse = await httpPost(config.baseUrl, config.token, '/api/fetch-website', { link: validUrl });
-    printResult(result, options);
+    printResult(result, options, config.baseUrl);
   } catch (error: unknown) {
     printCommandError(error, options);
   }

@@ -14,24 +14,47 @@ export function printJson(value: unknown): void {
   console.log(JSON.stringify(value, null, 2));
 }
 
-export function printResult(result: HttpResponse, options: CommandOutputOptions): void {
+function normalizeBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/$/, '');
+}
+
+function withAbsoluteNextPath<T>(data: T, baseUrl?: string): T {
+  if (!baseUrl || !data || typeof data !== 'object' || Array.isArray(data)) {
+    return data;
+  }
+
+  const record = data as Record<string, unknown>;
+  const nextPath = record.nextPath;
+  if (typeof nextPath !== 'string' || !nextPath.startsWith('/')) {
+    return data;
+  }
+
+  return {
+    ...record,
+    nextPath: `${normalizeBaseUrl(baseUrl)}${nextPath}`,
+  } as T;
+}
+
+export function printResult(result: HttpResponse, options: CommandOutputOptions, baseUrl?: string): void {
+  const normalizedData = withAbsoluteNextPath(result.data, baseUrl);
+
   if (options.json) {
-    printJson({ success: true, status: result.status, data: result.data });
+    printJson({ success: true, status: result.status, data: normalizedData });
     return;
   }
 
   if (options.quiet) {
-    if (typeof result.data === 'string') {
-      console.log(result.data);
+    if (typeof normalizedData === 'string') {
+      console.log(normalizedData);
       return;
     }
 
-    printJson(result.data);
+    printJson(normalizedData);
     return;
   }
 
   console.log(`Status: ${result.status}`);
-  console.log('Response:', JSON.stringify(result.data, null, 2));
+  console.log('Response:', JSON.stringify(normalizedData, null, 2));
 }
 
 export function printCommandError(error: unknown, options: CommandOutputOptions): never {
