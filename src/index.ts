@@ -25,6 +25,7 @@ program
   .command('submit <url>')
   .description('Submit a URL to the selected site')
   .option('--site <site>', `Override configured site (${SUPPORTED_SITES.join(', ')})`)
+  .option('--source <source>', 'Source label sent to the submit API', 'cli')
   .option('--json', 'Print machine-readable JSON output')
   .option('--quiet', 'Print only response payload')
   .action((targetUrl, options) => submit(CLI_VERSION, targetUrl, options));

@@ -34,6 +34,7 @@ test('submit --help shows site/json/quiet options', () => {
   });
 
   assert.match(output, /--site <site>/);
+  assert.match(output, /--source <source>/);
   assert.match(output, /--json/);
   assert.match(output, /--quiet/);
 });

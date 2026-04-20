@@ -7,7 +7,7 @@ import { validateUrl } from './validators'
 export async function submit(
   cliVersion: string,
   targetUrl: string,
-  options: { site?: string; json?: boolean; quiet?: boolean },
+  options: { site?: string; source?: string; json?: boolean; quiet?: boolean },
 ) {
   try {
     await maybeNotifyUpdate(cliVersion, { json: options.json, quiet: options.quiet })
@@ -20,7 +20,7 @@ export async function submit(
 
     const result: HttpResponse = await httpPost(config.baseUrl, config.token, '/api/submit', {
       link: validUrl,
-      source: 'cli',
+      source: options.source || 'cli',
     })
     printResult(result, options, config.baseUrl)
   } catch (error: unknown) {
