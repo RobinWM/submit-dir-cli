@@ -1,24 +1,51 @@
 name: Release
 
 on:
-  release:
-    types:
-      - published
+  push:
+    tags:
+      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to upload assets to
+        description: Existing release tag to rebuild/upload assets for
         required: true
-        default: v0.1.9
 
 permissions:
   contents: write
 
 env:
-  RELEASE_REPO: RobinWM/ship-cli
+  RELEASE_REPO: ${{ github.repository }}
+  RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.tag }}
 
 jobs:
+  ensure-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure GitHub release exists
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          git fetch --tags --force
+          if ! git rev-parse -q --verify "refs/tags/$RELEASE_TAG" >/dev/null; then
+            echo "Tag $RELEASE_TAG does not exist. Push the tag first or run npm run release:*."
+            exit 1
+          fi
+
+          if gh release view "$RELEASE_TAG" --repo "$RELEASE_REPO" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists."
+          else
+            gh release create "$RELEASE_TAG" --repo "$RELEASE_REPO" --title "$RELEASE_TAG" --notes "Release $RELEASE_TAG"
+          fi
+
   build-release-assets:
+    needs: ensure-release
     strategy:
       fail-fast: false
       matrix:
@@ -44,12 +71,12 @@ jobs:
             asset_name: ship-windows-x64
             upload_name: ship-windows-x64.exe
     runs-on: ${{ matrix.os }}
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -77,13 +104,14 @@ jobs:
         run: gh release upload "$RELEASE_TAG" "release-assets/${{ matrix.upload_name }}" --repo "$RELEASE_REPO" --clobber
 
   upload-package:
+    needs: ensure-release
     runs-on: ubuntu-latest
-    env:
-      RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -109,3 +137,46 @@ jobs:
         run: |
           gh release upload "$RELEASE_TAG" "$PACKAGE_TGZ" --repo "$RELEASE_REPO" --clobber
           gh release upload "$RELEASE_TAG" ship-latest.tgz --repo "$RELEASE_REPO" --clobber
+
+  publish-npm:
+    needs:
+      - ensure-release
+      - build-release-assets
+      - upload-package
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Publish package to npm if needed
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN:-}" ]; then
+            echo "NPM_TOKEN is not configured. Skipping npm publish."
+            exit 0
+          fi
+
+          PACKAGE_NAME="$(node -p "require('./package.json').name")"
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+
+          if npm view "$PACKAGE_NAME@$PACKAGE_VERSION" version >/dev/null 2>&1; then
+            echo "$PACKAGE_NAME@$PACKAGE_VERSION is already published. Skipping npm publish."
+            exit 0
+          fi
+
+          npm publish --access public

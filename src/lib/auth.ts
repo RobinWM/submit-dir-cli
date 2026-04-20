@@ -89,7 +89,8 @@ export async function login(cliVersion: string, options: { site?: string }) {
   console.log(`\n🔐 Opening browser to login to ${site}...`);
   console.log(`   Waiting for callback on localhost:${port}\n`);
 
-  const shouldOpenBrowser = process.platform !== 'linux';
+  const runtimePlatform = process.env.TEST_SUBMIT_DIR_PLATFORM || process.platform;
+  const shouldOpenBrowser = runtimePlatform !== 'linux';
   let browserOpened = false;
 
   if (shouldOpenBrowser) {

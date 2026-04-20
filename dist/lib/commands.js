@@ -15,7 +15,10 @@ async function submit(cliVersion, targetUrl, options) {
         if (!options.json && !options.quiet) {
             console.log(`Submitting ${validUrl} to ${config.baseUrl}...`);
         }
-        const result = await (0, http_1.httpPost)(config.baseUrl, config.token, '/api/submit', { link: validUrl });
+        const result = await (0, http_1.httpPost)(config.baseUrl, config.token, '/api/submit', {
+            link: validUrl,
+            source: 'cli',
+        });
         (0, output_1.printResult)(result, options, config.baseUrl);
     }
     catch (error) {

@@ -1,6 +1,6 @@
 # ship
 
-CLI tool for submitting URLs to [aidirs.org](https://aidirs.org) and [backlinkdirs.com](https://backlinkdirs.com).
+CLI tool for submitting URLs to [aidirs.org](https://aidirs.org)、[clidirs.com](https://clidirs.com) and [backlinkdirs.com](https://backlinkdirs.com).
 
 ## Installation
 
@@ -144,22 +144,60 @@ npm run build
 npm test
 ```
 
-Publish to npm:
+## Release
+
+The release flow is now a single local command plus one GitHub Actions workflow:
+
+```bash
+npm run release:patch
+npm run release:minor
+npm run release:major
+```
+
+Each release command does four things:
+
+1. Runs `npm test`
+2. Bumps the version with `npm version`
+3. Creates the matching git tag like `v0.1.10`
+4. Pushes `main` and the new tag to GitHub
+
+After the tag is pushed, [`.github/workflows/release.yml`](./.github/workflows/release.yml) automatically:
+
+- creates the GitHub Release if it does not exist yet
+- builds standalone binaries for Linux, macOS, and Windows
+- builds the npm package tarball
+- uploads all release assets to that GitHub Release
+- publishes the package to npm when `NPM_TOKEN` is configured in GitHub Actions secrets
+
+You can manually rerun the asset build from the GitHub Actions UI by running the `Release` workflow and entering an existing tag.
+
+## Publish to npm
+
+The release workflow can also publish to npm automatically.
+
+**You must configure `NPM_TOKEN` first. Otherwise the workflow will create the GitHub Release and upload assets, but it will skip `npm publish`.**
+
+Add this secret in your repository:
+
+```text
+Settings -> Secrets and variables -> Actions -> New repository secret
+```
+
+Then set:
+
+```text
+Name: NPM_TOKEN
+Value: your npm automation token
+```
+
+An npm automation token is recommended so CI publishing is not blocked by interactive login or 2FA prompts.
+
+If you prefer to publish manually, run:
 
 ```bash
 npm login
-npm run build
-npm test
 npm pack --dry-run
 npm publish
-```
-
-Release a new version:
-
-```bash
-./scripts/release.sh patch
-./scripts/release.sh minor
-./scripts/release.sh major
 ```
 
 Publishing uses `files` in `package.json`, so npm packages include `dist/` even though build output is generated from `src/`.

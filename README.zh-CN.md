@@ -1,6 +1,6 @@
 # ship
 
-一键提交 URL 到 [aidirs.org](https://aidirs.org) 和 [backlinkdirs.com](https://backlinkdirs.com) 的命令行工具。
+一键提交 URL 到 [aidirs.org](https://aidirs.org)、[clidirs.com](https://clidirs.com) 和 [backlinkdirs.com](https://backlinkdirs.com) 的命令行工具。
 
 ## 安装
 
@@ -139,17 +139,63 @@ npm run build
 npm test
 ```
 
+## 发布版本
+
+现在的发布流程已经收敛成“一个本地命令 + 一个 GitHub Actions 工作流”：
+
+```bash
+npm run release:patch
+npm run release:minor
+npm run release:major
+```
+
+每个发布命令都会做这四件事：
+
+1. 运行 `npm test`
+2. 通过 `npm version` 升级版本号
+3. 创建对应的 git tag，例如 `v0.1.10`
+4. 推送 `main` 分支和新 tag 到 GitHub
+
+tag 推送后，[`.github/workflows/release.yml`](./.github/workflows/release.yml) 会自动：
+
+- 如果 GitHub Release 还不存在，就先创建 Release
+- 构建 Linux、macOS、Windows 的独立可执行文件
+- 构建 npm 包的 tarball
+- 把这些发布资产上传到对应的 GitHub Release
+- 如果 GitHub Actions secrets 里配置了 `NPM_TOKEN`，还会自动发布到 npm
+
+如果只是想重新构建或重新上传某个已有版本的发布资产，也可以在 GitHub Actions 页面手动运行 `Release` 工作流，并输入一个已存在的 tag。
+
 ## 发布到 npm
+
+现在可以通过 GitHub Actions 自动发布到 npm。
+
+**必须先配置 `NPM_TOKEN`，否则 workflow 只会创建 GitHub Release 并上传资产，不会发布到 npm。**
+
+在仓库中按下面路径添加 secret：
+
+```text
+Settings -> Secrets and variables -> Actions -> New repository secret
+```
+
+然后填写：
+
+```text
+Name: NPM_TOKEN
+Value: 你的 npm automation token
+```
+
+建议使用 npm 的 automation token，这样在 CI/CD 场景下不会被交互式登录或 2FA 阻塞。
+
+如果你仍然希望手动发布到 npm，也可以执行：
 
 ```bash
 npm login
-npm run build
-npm test
 npm pack --dry-run
 npm publish
 ```
 
-发布时通过 `package.json` 的 `files` 字段控制内容，npm 包会包含 `dist/` 构建产物。
+发布时通过 `package.json` 的 `files` 字段控制内容，所以 npm 包会包含 `dist/` 构建产物。
 
 GitHub Release 预期会发布这些资产：
 - `ship-linux-x64`

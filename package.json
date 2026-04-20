@@ -1,6 +1,6 @@
 {
   "name": "@brenn/ship",
-  "version": "0.2.0",
+  "version": "0.1.9",
   "description": "CLI for shipping, submitting, and managing site growth workflows across aidirs.org and backlinkdirs.com.",
   "main": "dist/index.js",
   "bin": {
@@ -34,9 +34,9 @@
     "prepublishOnly": "npm run build",
     "prepack": "npm run build",
     "test": "npm run build && node --test tests/*.test.js",
-    "release:patch": "./scripts/release.sh patch",
-    "release:minor": "./scripts/release.sh minor",
-    "release:major": "./scripts/release.sh major"
+    "release:patch": "node scripts/release.mjs patch",
+    "release:minor": "node scripts/release.mjs minor",
+    "release:major": "node scripts/release.mjs major"
   },
   "keywords": [
     "ship",
