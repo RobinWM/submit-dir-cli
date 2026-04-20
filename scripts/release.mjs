@@ -84,7 +84,7 @@ const tagName = run('npm', ['version', bumpType, '--no-git-tag-version'], { capt
 
 run('git', ['add', '-A'])
 run('git', ['commit', '-m', `chore: release ${tagName || `v${getPackageVersion()}`}`])
-run('git', ['tag', tagName || `v${getPackageVersion()}`])
+run('git', ['tag', '-a', tagName || `v${getPackageVersion()}`, '-m', `chore: release ${tagName || `v${getPackageVersion()}`}`])
 run('git', ['push', 'origin', 'main', '--follow-tags'])
 
 console.log(`Released ${tagName || `v${getPackageVersion()}`}. GitHub Actions will create the GitHub Release and upload assets.`)
