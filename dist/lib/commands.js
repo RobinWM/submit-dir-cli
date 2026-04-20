@@ -17,7 +17,7 @@ async function submit(cliVersion, targetUrl, options) {
         }
         const result = await (0, http_1.httpPost)(config.baseUrl, config.token, '/api/submit', {
             link: validUrl,
-            source: 'cli',
+            source: options.source || 'cli',
         });
         (0, output_1.printResult)(result, options, config.baseUrl);
     }

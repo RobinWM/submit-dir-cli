@@ -1,6 +1,6 @@
 {
   "name": "@brenn/ship",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "CLI for shipping, submitting, and managing site growth workflows across aidirs.org and backlinkdirs.com.",
   "main": "dist/index.js",
   "bin": {
